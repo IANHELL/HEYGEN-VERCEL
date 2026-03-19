@@ -304,7 +304,6 @@
   <div class="result-box" id="resultBox">
     <div class="result-label">✓ Vídeo en generación</div>
     <div class="video-id" id="videoIdDisplay"></div>
-    <div id="engineDisplay" style="font-size:12px;color:var(--accent2);margin-bottom:14px;"></div>
     <div class="actions">
       <button class="btn-secondary" onclick="checkStatus()">Comprobar estado</button>
       <button class="btn-secondary" onclick="openHeyGen()">Abrir en HeyGen →</button>
@@ -316,7 +315,6 @@
 let audioBlob = null;
 let currentVideoId = '';
 let currentAssetId = '';
-let currentEngineSent = '';
 
 // Persistencia
 const FIELDS = ['heygenKey','avatarId','elKey','voiceId','elModel','avatarEngine','avatarStyle','videoDimension','bgType','bgColor','stability','similarity','styleExag','speed','outputFormat','elSeed'];
@@ -429,19 +427,8 @@ if(document.readyState !== 'loading') renderELControls();
 function toggleAttitude(){
   const engine = document.getElementById('avatarEngine').value;
   document.getElementById('attitudeSection').style.display = engine === '4' ? 'block' : 'none';
-  updateEngineHint();
 }
-
-function updateEngineHint(){
-  const engine = document.getElementById('avatarEngine').value;
-  const btn = document.getElementById('btnAudio');
-  if(btn){
-    btn.textContent = `1 · Generar audio en ElevenLabs · ${engine === '4' ? 'Avatar IV' : 'Avatar III'}`;
-  }
-}
-
 toggleAttitude();
-updateEngineHint();
 
 function selectAttitude(card, key){
   document.querySelectorAll('.attitude-card').forEach(c => c.classList.remove('selected'));
@@ -644,28 +631,22 @@ async function generateVideo(heygenKey, avatarId, assetId){
       : { type: 'color', value: document.getElementById('bgColor').value };
 
     const attitudePrompt = engine === '4' ? getAttitudePrompt() : '';
-    const engineLabel = engine === '4' ? 'Avatar IV' : 'Avatar III';
-
+    const engineStr = engine === '4' ? 'avatar IV' : 'avatar III';
     const payload = {
       video_inputs: [{
         character: {
           type: 'talking_photo',
           talking_photo_id: avatarId,
-          avatar_style: avatarStyle
+          avatar_style: avatarStyle,
+          avatar_engine: engineStr
         },
         voice: { type: 'audio', audio_asset_id: assetId },
         background: background
       }],
       dimension: { width: w, height: h },
-      avatar_engine: engineLabel
+      avatar_engine: engineStr,
+      ...(attitudePrompt ? { expression_prompt: attitudePrompt } : {})
     };
-
-    if(engine === '4' && attitudePrompt){
-      payload.expression_prompt = attitudePrompt;
-    }
-
-    console.log('ENGINE SELECCIONADO:', engineLabel);
-    console.log('PAYLOAD HEYGEN:', payload);
 
     const videoRes = await fetch('/api/heygen?path=/v2/video/generate', {
       method: 'POST',
@@ -678,14 +659,12 @@ async function generateVideo(heygenKey, avatarId, assetId){
     if(!videoRes.ok || videoData.error) throw new Error('HeyGen: '+JSON.stringify(videoData));
 
     currentVideoId = videoData.data?.video_id || videoData.video_id;
-    currentEngineSent = engineLabel;
-    document.getElementById('videoIdDisplay').textContent = 'Video ID: ' + currentVideoId;
-    document.getElementById('engineDisplay').textContent = 'Motor enviado a HeyGen: ' + currentEngineSent;
+    document.getElementById('videoIdDisplay').textContent = 'Video ID: '+currentVideoId;
     document.getElementById('resultBox').style.display = 'block';
-    setStatus(`✓ Vídeo en generación con ${currentEngineSent}. Tarda entre 1 y 5 minutos.`, 'success');
+    setStatus('✓ Vídeo en generación. Tarda entre 1 y 5 minutos.','success');
     setStep(5);
   } catch(err){
-    setStatus('Error generando vídeo: ' + err.message, 'error');
+    setStatus('Error generando vídeo: '+err.message,'error');
   }
 }
 
