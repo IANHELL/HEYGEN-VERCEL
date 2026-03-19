@@ -180,7 +180,7 @@
         <input type="text" id="avatarId" placeholder="Avatar ID (o carga tus avatares)" oninput="saveField('avatarId',this.value)">
         <button class="btn-small" onclick="loadAvatars()">Cargar avatares</button>
       </div>
-      <div id="avatarGrid" style="display:none;"></div>
+      <select id="avatarSelect" style="margin-top:8px;display:none" onchange="if(this.value){document.getElementById('avatarId').value=this.value;saveField('avatarId',this.value)}"><option value="">— selecciona un avatar —</option></select>
     </div>
 
     <div class="row" style="margin-bottom:16px;">
@@ -499,53 +499,27 @@ async function loadAvatars(){
     const groups = grpData.data?.avatar_group_list || grpData.data?.groups || [];
     if(!groups.length) throw new Error('No se encontraron grupos: ' + JSON.stringify(grpData));
 
-    const grid = document.getElementById('avatarGrid');
-    grid.innerHTML = '';
+    const sel = document.getElementById('avatarSelect');
+    sel.innerHTML = '<option value="">— selecciona un avatar —</option>';
     let total = 0;
 
     for(const grp of groups){
       const looksRes = await fetch(`/api/heygen?path=/v2/avatar_group/${grp.id}/avatars`, { headers: {'X-Api-Key': key} });
       const looksData = await looksRes.json();
       const looks = looksData.data?.avatar_list || looksData.data?.avatars || [];
-
-      console.log('First look sample:', JSON.stringify(looks[0]));
-      if(looks.length){
-        const label = document.createElement('div');
-        label.style.cssText = 'grid-column:1/-1;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-top:12px;margin-bottom:4px;';
-        label.textContent = grp.name;
-        grid.appendChild(label);
-
-        const row = document.createElement('div');
-        row.className = 'avatar-grid';
-        looks.forEach(look => {
-          const id = look.avatar_id || look.id;
-          const name = look.avatar_name || look.name || id;
-          const preview = '';
-          const card = document.createElement('div');
-          card.className = 'avatar-thumb';
-          card.dataset.id = id;
-          card.innerHTML = `<img src="${preview}" alt="${name}" onerror="this.style.minHeight='60px'"><div class="av-name">${name}</div>`;
-          card.onclick = () => {
-            document.querySelectorAll('.avatar-thumb').forEach(c => c.classList.remove('selected'));
-            card.classList.add('selected');
-            document.getElementById('avatarId').value = id;
-            saveField('avatarId', id);
-          };
-          row.appendChild(card);
-          total++;
-        });
-        grid.appendChild(row);
-      }
+      looks.forEach(look => {
+        const opt = document.createElement('option');
+        opt.value = look.avatar_id || look.id;
+        opt.textContent = `${grp.name} — ${look.avatar_name || look.name || look.id}`;
+        sel.appendChild(opt);
+        total++;
+      });
     }
 
     if(!total) throw new Error('No se encontraron avatares');
-    grid.style.display = 'block';
-
+    sel.style.display = 'block';
     const saved = document.getElementById('avatarId').value;
-    if(saved){
-      const match = grid.querySelector(`[data-id="${saved}"]`);
-      if(match) match.classList.add('selected');
-    }
+    if(saved) sel.value = saved;
     setStatus(`✓ ${total} avatares cargados. Selecciona uno.`,'success');
   } catch(err){
     setStatus('Error cargando avatares: '+err.message,'error');
