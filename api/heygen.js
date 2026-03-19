@@ -1,21 +1,23 @@
-const https = require('https');
+import https from 'https';
 
-exports.handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type, X-Api-Key',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
-      },
-      body: ''
-    };
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
   }
 
-  const apiKey = event.headers['x-api-key'] || event.headers['X-Api-Key'];
-  const path = event.queryStringParameters?.path || '/v2/video/generate';
-  const method = event.httpMethod;
+  const apiKey = req.headers['x-api-key'];
+  const path = req.query.path || '/v2/video/generate';
+  const method = req.method;
+
+  const body = await new Promise((resolve) => {
+    let data = '';
+    req.on('data', chunk => data += chunk);
+    req.on('end', () => resolve(data));
+  });
 
   return new Promise((resolve) => {
     const options = {
@@ -24,34 +26,25 @@ exports.handler = async (event) => {
       method: method,
       headers: {
         'X-Api-Key': apiKey,
-        'Content-Type': event.headers['content-type'] || 'application/json'
+        'Content-Type': req.headers['content-type'] || 'application/json'
       }
     };
 
-    const req = https.request(options, (res) => {
+    const proxyReq = https.request(options, (proxyRes) => {
       let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        resolve({
-          statusCode: res.statusCode,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Content-Type': 'application/json'
-          },
-          body: data
-        });
+      proxyRes.on('data', chunk => data += chunk);
+      proxyRes.on('end', () => {
+        res.status(proxyRes.statusCode).json(JSON.parse(data || '{}'));
+        resolve();
       });
     });
 
-    req.on('error', (err) => {
-      resolve({
-        statusCode: 500,
-        headers: { 'Access-Control-Allow-Origin': '*' },
-        body: JSON.stringify({ error: err.message })
-      });
+    proxyReq.on('error', (err) => {
+      res.status(500).json({ error: err.message });
+      resolve();
     });
 
-    if (event.body) req.write(event.body);
-    req.end();
+    if (body) proxyReq.write(body);
+    proxyReq.end();
   });
-};
+}

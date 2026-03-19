@@ -3,5 +3,8 @@
     "api/*.js": {
       "maxDuration": 30
     }
+  },
+  "config": {
+    "bodyParser": false
   }
 }

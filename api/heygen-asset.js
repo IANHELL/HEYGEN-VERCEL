@@ -1,24 +1,22 @@
-const https = require('https');
+import https from 'https';
 
-exports.handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type, X-Api-Key, X-File-Type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS'
-      },
-      body: ''
-    };
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key, X-File-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
   }
 
-  const apiKey = event.headers['x-api-key'] || event.headers['X-Api-Key'];
-  const fileType = event.headers['x-file-type'] || 'audio/mpeg';
+  const apiKey = req.headers['x-api-key'];
+  const contentType = req.headers['content-type'] || 'audio/mpeg';
 
-  const body = event.isBase64Encoded
-    ? Buffer.from(event.body, 'base64')
-    : Buffer.from(event.body || '', 'binary');
+  const body = await new Promise((resolve) => {
+    const chunks = [];
+    req.on('data', chunk => chunks.push(chunk));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+  });
 
   return new Promise((resolve) => {
     const options = {
@@ -27,35 +25,26 @@ exports.handler = async (event) => {
       method: 'POST',
       headers: {
         'X-Api-Key': apiKey,
-        'Content-Type': fileType,
+        'Content-Type': contentType,
         'Content-Length': body.length
       }
     };
 
-    const req = https.request(options, (res) => {
+    const proxyReq = https.request(options, (proxyRes) => {
       let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        resolve({
-          statusCode: res.statusCode,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Content-Type': 'application/json'
-          },
-          body: data
-        });
+      proxyRes.on('data', chunk => data += chunk);
+      proxyRes.on('end', () => {
+        res.status(proxyRes.statusCode).json(JSON.parse(data || '{}'));
+        resolve();
       });
     });
 
-    req.on('error', (err) => {
-      resolve({
-        statusCode: 500,
-        headers: { 'Access-Control-Allow-Origin': '*' },
-        body: JSON.stringify({ error: err.message })
-      });
+    proxyReq.on('error', (err) => {
+      res.status(500).json({ error: err.message });
+      resolve();
     });
 
-    req.write(body);
-    req.end();
+    proxyReq.write(body);
+    proxyReq.end();
   });
-};
+}
