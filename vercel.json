@@ -1,6 +1,9 @@
 {
   "functions": {
-    "api/*.js": {
+    "api/heygen.js": {
+      "maxDuration": 30
+    },
+    "api/heygen-asset.js": {
       "maxDuration": 30
     }
   }

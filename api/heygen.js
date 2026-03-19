@@ -1,40 +1,42 @@
-import https from 'https';
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key, x-api-key');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
   const apiKey = req.headers['x-api-key'];
   const path = req.query.path || '/v2/video/generate';
-  const method = req.method;
 
   const body = await new Promise((resolve) => {
-    let data = '';
-    req.on('data', chunk => data += chunk);
-    req.on('end', () => resolve(data));
+    let data = [];
+    req.on('data', chunk => data.push(chunk));
+    req.on('end', () => resolve(Buffer.concat(data).toString()));
   });
 
+  const https = await import('https');
+
   return new Promise((resolve) => {
+    const url = new URL('https://api.heygen.com' + path);
     const options = {
-      hostname: 'api.heygen.com',
-      path: path,
-      method: method,
+      hostname: url.hostname,
+      path: url.pathname + url.search,
+      method: req.method,
       headers: {
         'X-Api-Key': apiKey,
         'Content-Type': req.headers['content-type'] || 'application/json'
       }
     };
 
-    const proxyReq = https.request(options, (proxyRes) => {
+    const proxyReq = https.default.request(options, (proxyRes) => {
       let data = '';
       proxyRes.on('data', chunk => data += chunk);
       proxyRes.on('end', () => {
-        res.status(proxyRes.statusCode).json(JSON.parse(data || '{}'));
+        try {
+          res.status(proxyRes.statusCode).json(JSON.parse(data));
+        } catch(e) {
+          res.status(proxyRes.statusCode).send(data);
+        }
         resolve();
       });
     });

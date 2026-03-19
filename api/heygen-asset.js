@@ -1,13 +1,9 @@
-import https from 'https';
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key, X-File-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key, x-api-key, X-File-Type');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
   const apiKey = req.headers['x-api-key'];
   const contentType = req.headers['content-type'] || 'audio/mpeg';
@@ -17,6 +13,8 @@ export default async function handler(req, res) {
     req.on('data', chunk => chunks.push(chunk));
     req.on('end', () => resolve(Buffer.concat(chunks)));
   });
+
+  const https = await import('https');
 
   return new Promise((resolve) => {
     const options = {
@@ -30,11 +28,15 @@ export default async function handler(req, res) {
       }
     };
 
-    const proxyReq = https.request(options, (proxyRes) => {
+    const proxyReq = https.default.request(options, (proxyRes) => {
       let data = '';
       proxyRes.on('data', chunk => data += chunk);
       proxyRes.on('end', () => {
-        res.status(proxyRes.statusCode).json(JSON.parse(data || '{}'));
+        try {
+          res.status(proxyRes.statusCode).json(JSON.parse(data));
+        } catch(e) {
+          res.status(proxyRes.statusCode).send(data);
+        }
         resolve();
       });
     });
